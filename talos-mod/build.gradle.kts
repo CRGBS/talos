@@ -27,7 +27,12 @@ dependencies {
 
     implementation(project(":talos-graalpy-runtime"))
     include(project(":talos-graalpy-runtime"))
-    add(graalpyRuntimeClasspath.name, project(":talos-graalpy-runtime"))
+    // Explicitly request the runtime variant so runtimeOnly dependencies are included
+    // in the resolved graph below.
+    add(
+        graalpyRuntimeClasspath.name,
+        project(path = ":talos-graalpy-runtime", configuration = "runtimeElements")
+    )
 
     implementation("org.java-websocket:Java-WebSocket:1.5.7")
     include("org.java-websocket:Java-WebSocket:1.5.7")
