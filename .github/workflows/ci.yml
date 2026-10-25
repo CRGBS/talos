@@ -2,7 +2,14 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
+      - "fix/graalpy-runtime-jar-inclusion"
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
