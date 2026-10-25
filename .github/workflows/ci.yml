@@ -2,7 +2,14 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
+      - "fix/graalpy-runtime-jar-inclusion"
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -67,3 +74,10 @@ jobs:
 
           print(f"Verified bundled GraalPy runtime in {artifact}")
           PY
+      - name: Upload the built Talos JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: talos-mod-${{ github.sha }}
+          path: talos-mod/build/libs/talos-mod-*.jar
+          if-no-files-found: error
+          retention-days: 30
