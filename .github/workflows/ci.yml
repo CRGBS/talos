@@ -74,10 +74,16 @@ jobs:
 
           print(f"Verified bundled GraalPy runtime in {artifact}")
           PY
+      - name: Stage versioned release JAR
+        run: |
+          mod_version="$(sed -n 's/^mod_version=//p' gradle.properties)"
+          minecraft_version="$(sed -n 's/^minecraft_version=//p' gradle.properties)"
+          mkdir -p dist
+          cp "talos-mod/build/libs/talos-mod-${mod_version}.jar" "dist/talos-mod-${mod_version}-mc${minecraft_version}.jar"
       - name: Upload the built Talos JAR
         uses: actions/upload-artifact@v4
         with:
           name: talos-mod-${{ github.sha }}
-          path: talos-mod/build/libs/talos-mod-*.jar
+          path: dist/talos-mod-*.jar
           if-no-files-found: error
           retention-days: 30
