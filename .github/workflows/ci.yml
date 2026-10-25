@@ -2,7 +2,14 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
+      - "fix/graalpy-runtime-jar-inclusion"
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -14,5 +21,69 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Run talos-mod tests
-        run: ./gradlew :talos-mod:test --no-configuration-cache
+      - name: Run runtime and mod tests and build the release jar
+        run: ./gradlew :talos-graalpy-runtime:test :talos-mod:test :talos-mod:remapJar --no-configuration-cache
+      - name: Verify the release jar bundles GraalPy
+        run: |
+          python3 - <<'PY'
+          from io import BytesIO
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          properties = {}
+          for line in Path("gradle.properties").read_text(encoding="utf-8").splitlines():
+              line = line.strip()
+              if line and not line.startswith("#") and "=" in line:
+                  key, value = line.split("=", 1)
+                  properties[key.strip()] = value.strip()
+
+          version = properties["mod_version"]
+          artifact = Path("talos-mod/build/libs") / f"talos-mod-{version}.jar"
+          if not artifact.is_file():
+              candidates = sorted(str(p) for p in Path("talos-mod/build/libs").glob("*.jar"))
+              raise SystemExit(f"Release jar not found: {artifact}; candidates: {candidates}")
+
+          required_modules = ("polyglot", "python-language", "python-resources", "truffle-runtime")
+          with ZipFile(artifact) as outer:
+              nested_jars = [
+                  name for name in outer.namelist()
+                  if name.startswith("META-INF/jars/") and name.endswith(".jar")
+              ]
+              nested_names = [Path(name).name.lower() for name in nested_jars]
+              missing = [
+                  module for module in required_modules
+                  if not any(module in name for name in nested_names)
+              ]
+              if missing:
+                  raise SystemExit(
+                      f"{artifact} is missing nested GraalPy modules: {missing}; "
+                      f"found: {nested_jars}"
+                  )
+
+              context_found = False
+              for name in nested_jars:
+                  with ZipFile(BytesIO(outer.read(name))) as nested:
+                      if "org/graalvm/polyglot/Context.class" in nested.namelist():
+                          context_found = True
+                          break
+              if not context_found:
+                  raise SystemExit(
+                      f"{artifact} does not contain org/graalvm/polyglot/Context.class "
+                      "in its nested jars"
+                  )
+
+          print(f"Verified bundled GraalPy runtime in {artifact}")
+          PY
+      - name: Stage versioned release JAR
+        run: |
+          mod_version="$(sed -n 's/^mod_version=//p' gradle.properties)"
+          minecraft_version="$(sed -n 's/^minecraft_version=//p' gradle.properties)"
+          mkdir -p dist
+          cp "talos-mod/build/libs/talos-mod-${mod_version}.jar" "dist/talos-mod-${mod_version}-mc${minecraft_version}.jar"
+      - name: Upload the built Talos JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: talos-mod-${{ github.sha }}
+          path: dist/talos-mod-*.jar
+          if-no-files-found: error
+          retention-days: 30
