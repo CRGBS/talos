@@ -150,7 +150,8 @@ public final class TalosNativeBridge {
     }
 
     private CompletableFuture<String> pathFuture(String name, Goal goal) {
-        return trackPath(name, game.submit(() -> TalosClient.pathingEngine().goTo(goal, PathingOptions.DEFAULT))
+        // Python goto must navigate without mining; prefer swimming, jumping, or routing around blocks.
+        return trackPath(name, game.submit(() -> TalosClient.pathingEngine().goTo(goal, PathingOptions.NAVIGATE_ONLY))
                 .thenCompose(f -> f)
                 .thenApply(TalosNativeBridge::requirePath));
     }
