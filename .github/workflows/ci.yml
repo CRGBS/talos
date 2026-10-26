@@ -23,6 +23,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Run talos-mod tests
         run: ./gradlew :talos-mod:test --no-configuration-cache
+      # Preserve the Gradle HTML/XML report when tests fail so the assertion
+      # message and partial route diagnostics are available from the Actions run.
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talos-test-reports-${{ github.run_id }}
+          path: |
+            talos-mod/build/reports/tests/test/
+            talos-mod/build/test-results/test/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Build remapped Talos JAR
         run: ./gradlew :talos-mod:remapJar --no-configuration-cache
       - name: Upload Talos JAR artifact
