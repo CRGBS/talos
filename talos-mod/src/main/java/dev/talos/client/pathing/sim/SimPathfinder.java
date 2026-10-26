@@ -227,7 +227,16 @@ public final class SimPathfinder {
             // swimming/crawling state is allowed to continue across a shallow boundary.
             boolean continuingCompactPose = node.state().pose() == MotionState.Pose.SWIM
                     || node.state().pose() == MotionState.Pose.CRAWL;
-            if (continuingCompactPose || deepWater(world, node.cell().add(dx, 0, dz))) {
+            // A node can first enter water by falling off a bank. At the waterline,
+            // the cell above the water is air, so the destination-only deep-water check
+            // would never let that node transition into the compact swim pose. Once the
+            // current hitbox overlaps water, allow the transition if the swim hitbox fits;
+            // otherwise keep the deep-water gate for dry starts.
+            boolean canEnterSwim = node.state().fluid() == MotionState.Fluid.WATER
+                    && PlayerMotion.hitboxFits(world, MotionState.Pose.SWIM,
+                            node.state().position());
+            if (continuingCompactPose || canEnterSwim
+                    || deepWater(world, node.cell().add(dx, 0, dz))) {
                 add(result, rollout(world, node.withState(fluidStart), profile, opts,
                         Primitive.SWIM, direction,
                         new Input(1.0F, 0.0F, true, false, false, yaw), false, true));
@@ -283,8 +292,12 @@ public final class SimPathfinder {
             boolean newCell = !reached.equals(origin);
             // A climbable cell is a stable route node too: the climb physics hold position,
             // which is what lets ladder/vine/scaffolding ascents chain as ordinary edges.
-            boolean stable = swimming ? state.inFluid() : state.onGround() || state.inFluid()
-                    || PlayerMotion.climbable(world.getBlockState(reached));
+            // A swim rollout must also be allowed to terminate on a solid bank.
+            // Requiring fluid at the endpoint prevented the planner from ever recording
+            // the climb-out step, even after the simulated swimmer had landed on shore.
+            boolean stable = swimming ? state.inFluid() || state.onGround()
+                    : state.onGround() || state.inFluid()
+                            || PlayerMotion.climbable(world.getBlockState(reached));
             if (newCell && stable && (!arc || airborne)) {
                 int horizontal = Math.max(Math.abs(reached.getX() - origin.getX()),
                         Math.abs(reached.getZ() - origin.getZ()));
